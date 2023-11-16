@@ -352,14 +352,14 @@ namespace larg4 {
           // clear current particle as we are not stepping this particle and
           // adding trajectory points to it
           fdroppedTracksMap[this->GetParentage(trackID)].insert(trackID);
+          // keep track of this particle in the fMCTIndexMap as well, as we may keep a daughter
+          if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
+            fMCTIndexMap[trackID] = it->second;
+          }
           if (!fStoreDroppedMCParticles){ //Only clear if not storing dropped particles
             fCurrentParticle.clear();
+            return;
           }
-	  // keep track of this particle in the fMCTIndexMap as well, as we may keep a daughter
-	  if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
-	    fMCTIndexMap[trackID] = it->second;
-	  }
-          return;
           //fCurrentParticle.clear();
           //return;
         } // end if process matches an undesired process
@@ -376,10 +376,10 @@ namespace larg4 {
         fParentIDMap[trackID] = parentID;
         fCurrentTrackID = -1 * this->GetParentage(trackID);
         fTargetIDMap[trackID] = fCurrentTrackID;
-	// keep track of this particle in the fMCTIndexMap as well, as we may keep a daughter
-	if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
-	  fMCTIndexMap[trackID] = it->second;
-	}
+        // keep track of this particle in the fMCTIndexMap as well, as we may keep a daughter
+        if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
+          fMCTIndexMap[trackID] = it->second;
+        }
         return;
       }
 
@@ -531,7 +531,12 @@ namespace larg4 {
 
     if (!fCurrentParticle.isInVolume) {
       auto key_to_erase = fParticleList.key(fCurrentParticle.particle);
-      fParticleList.erase(key_to_erase);
+      //std::cout<<"ParticleListActionService::postUserTrackingAction: erasing particle with key "<<key_to_erase<<std::endl;
+      //Check if key_to_erase is in fParticleList of fDroppedParticleList
+      if (fParticleList.KnownParticle(key_to_erase)) fParticleList.erase(key_to_erase);
+      else if (fdroppedParticleList && fdroppedParticleList->KnownParticle(key_to_erase)) fdroppedParticleList->erase(key_to_erase);
+      else std::cout<<"ParticleListActionService::postUserTrackingAction: key "<<key_to_erase<<" not found in fParticleList or fDroppedParticleList"<<std::endl;
+      //fParticleList.erase(key_to_erase);
       //
       int const trackID = aTrack->GetTrackID() + fTrackIDOffset;
       int parentID = aTrack->GetParentID() + fTrackIDOffset;
