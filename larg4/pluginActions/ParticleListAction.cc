@@ -327,7 +327,7 @@ namespace larg4 {
       // one of pair production, compton scattering, photoelectric effect
       // bremstrahlung, annihilation, or ionization
       process_name = track->GetCreatorProcess()->GetProcessName();
-      if (!fKeepEMShowerDaughters || !fStoreDroppedMCParticles) {
+      if (!fKeepEMShowerDaughters && !fStoreDroppedMCParticles) {
         for (auto const& p : fNotStoredPhysics) {
           if (process_name.find(p) != std::string::npos) {
             notstore = true;
