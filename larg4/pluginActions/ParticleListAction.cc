@@ -83,6 +83,11 @@ namespace larg4 {
                                                       nullptr)
 
   {
+    if (fStoreDroppedMCParticles & fKeepEMShowerDaughters){
+      throw art::Exception(art::errors::Configuration)
+        << "ParticleListActionService: Cannot set both StoreDroppedMCParticles and KeepEMShowerDaughters to true. "
+        << "This will result in double counting of particles. Please set one of these parameters to false.";
+    }
     // -- D.R. If a custom list of not storable physics is provided, use it, otherwise
     //    use the default list. This preserves the behavior of the keepEmShowerDaughters
     //    parameter
@@ -322,7 +327,7 @@ namespace larg4 {
       // one of pair production, compton scattering, photoelectric effect
       // bremstrahlung, annihilation, or ionization
       process_name = track->GetCreatorProcess()->GetProcessName();
-      if (!fKeepEMShowerDaughters) {
+      if (!fKeepEMShowerDaughters || !fStoreDroppedMCParticles) {
         for (auto const& p : fNotStoredPhysics) {
           if (process_name.find(p) != std::string::npos) {
             notstore = true;
@@ -356,12 +361,12 @@ namespace larg4 {
           if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
             fMCTIndexMap[trackID] = it->second;
           }
-          if (!fStoreDroppedMCParticles){ //Only clear if not storing dropped particles
-            fCurrentParticle.clear();
-            return;
-          }
-          //fCurrentParticle.clear();
-          //return;
+          // if (!fStoreDroppedMCParticles){ //Only clear if not storing dropped particles
+          //   fCurrentParticle.clear();
+          //   return;
+          // }
+          fCurrentParticle.clear();
+          return;
         } // end if process matches an undesired process
       }   // end if not keeping EM shower daughters
 
