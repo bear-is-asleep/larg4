@@ -327,11 +327,12 @@ namespace larg4 {
       // one of pair production, compton scattering, photoelectric effect
       // bremstrahlung, annihilation, or ionization
       process_name = track->GetCreatorProcess()->GetProcessName();
-      if (!fKeepEMShowerDaughters && !fStoreDroppedMCParticles) {
+      if (!fKeepEMShowerDaughters || !fStoreDroppedMCParticles) {
         for (auto const& p : fNotStoredPhysics) {
           if (process_name.find(p) != std::string::npos) {
             notstore = true;
-            mf::LogDebug("NotStoredPhysics") << "Found process : " << process_name;
+            mf::LogDebug("NotStoredPhysics") << "Found process : " << process_name
+            << "trackID : " << fCurrentTrackID << " parentID : " << parentID << " pdgCode : " << pdgCode;
 
             int old = 0;
             auto search = fNotStoredCounterUMap.find(p);
@@ -344,7 +345,9 @@ namespace larg4 {
           // figure out the ultimate parentage of this particle
           // first add this track id and its parent to the fParentIDMap
           fParentIDMap[trackID] = parentID;
-          fCurrentTrackID = -1 * this->GetParentage(trackID);
+          if (!fStoreDroppedMCParticles) {
+            fCurrentTrackID = -1 * this->GetParentage(trackID); // only set if not storing dropped particles
+          }
           // check that fCurrentTrackID is in the particle list - it is possible
           // that this particle's parent is a particle that did not get tracked.
           // An example is a parent that was made due to muMinusCaptureAtRest
@@ -361,12 +364,10 @@ namespace larg4 {
           if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
             fMCTIndexMap[trackID] = it->second;
           }
-          // if (!fStoreDroppedMCParticles){ //Only clear if not storing dropped particles
-          //   fCurrentParticle.clear();
-          //   return;
-          // }
-          fCurrentParticle.clear();
-          return;
+          if (!fStoreDroppedMCParticles){ //Only clear if not storing dropped particles
+            fCurrentParticle.clear();
+            return;
+          }
         } // end if process matches an undesired process
       }   // end if not keeping EM shower daughters
 
@@ -379,12 +380,13 @@ namespace larg4 {
         // do add the particle to the parent id map though
         // and set the current track id to be it's ultimate parent
         fParentIDMap[trackID] = parentID;
-        fCurrentTrackID = -1 * this->GetParentage(trackID);
-        fTargetIDMap[trackID] = fCurrentTrackID;
+
         // keep track of this particle in the fMCTIndexMap as well, as we may keep a daughter
         if (auto it = fMCTIndexMap.find(parentID); it != cend(fMCTIndexMap)) {
           fMCTIndexMap[trackID] = it->second;
         }
+        fCurrentTrackID = -1 * this->GetParentage(trackID); // only set if not storing dropped particles
+        fTargetIDMap[trackID] = fCurrentTrackID;
         return;
       }
 
@@ -392,8 +394,9 @@ namespace larg4 {
       // if not, then see if it is possible to walk up the fParentIDMap to find the
       // ultimate parent of this particle.  Use that ID as the parent ID for this
       // particle
-      if (!fParticleList.KnownParticle(parentID) && fMCTIndexMap.count(parentID)==0 && 
-        !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID))) {
+      if (!fParticleList.KnownParticle(parentID) && 
+        (fMCTIndexMap.count(parentID)==0 && 
+        !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)))) {
         // do add the particle to the parent id map
         // just in case it makes a daughter that we have to track as well
         fParentIDMap[trackID] = parentID;
@@ -401,8 +404,8 @@ namespace larg4 {
 
         // if we still can't find the parent in the particle navigator,
         // we have to give up
-        if (!fParticleList.KnownParticle(pid) && fMCTIndexMap.count(pid)==0 && 
-          !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID))) {
+        if (!fParticleList.KnownParticle(pid) && (fMCTIndexMap.count(pid)==0 && 
+          !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)))) {
           MF_LOG_WARNING("ParticleListActionService")
             << "can't find parent id: " << parentID << " in the particle list, or fParentIDMap."
             << " Make " << parentID << " the mother ID for"
@@ -455,7 +458,9 @@ namespace larg4 {
     fCurrentParticle.particle->SetPolarization(
       TVector3{polarization.x(), polarization.y(), polarization.z()});
 
-    if (track->GetProperTime() != 0) { return; }
+    if (track->GetProperTime() != 0 && !fStoreDroppedMCParticles) { 
+      return; 
+    }
 
     // if we are not filtering, we have a decision already
     if (!fFilter) fCurrentParticle.isInVolume = true;
@@ -463,6 +468,7 @@ namespace larg4 {
     // if KeepEMShowerDaughters = False and we decided to drop this particle,
     // record it before throwing it away.
     if (notstore) { // this bool checks if particle is eliminated by NotStoredPhysics
+      fCurrentParticle.dropEM = true;
       if (fdroppedParticleList) fdroppedParticleList->Add(fCurrentParticle.particle);
       return;
     }
@@ -490,11 +496,13 @@ namespace larg4 {
         // type.  We have to entirely erase the entry.
         auto key_to_erase = fParticleList.key(fCurrentParticle.particle);
         fParticleList.erase(key_to_erase);
-        if (!fCurrentParticle.keepFullTrajectory && fdroppedParticleList) {
-          //fdroppedParticleList->erase(key_to_erase); // also erase from dropped list
-          fdroppedParticleList->Archive(
-            fCurrentParticle
-              .particle); //Archive in case LArG4 is configured to keep minimal version
+        if (fCurrentParticle.dropEM){
+          if (!fCurrentParticle.keepFullTrajectory && fdroppedParticleList) {
+            fdroppedParticleList->erase(key_to_erase); // also erase from dropped list
+            // fdroppedParticleList->Archive(
+            //   fCurrentParticle
+            //     .particle); //Archive in case LArG4 is configured to keep minimal version
+          }        
         }
         // after the particle is archived, it is deleted
         fCurrentParticle.clear();
@@ -536,11 +544,10 @@ namespace larg4 {
 
     if (!fCurrentParticle.isInVolume) {
       auto key_to_erase = fParticleList.key(fCurrentParticle.particle);
-      //std::cout<<"ParticleListActionService::postUserTrackingAction: erasing particle with key "<<key_to_erase<<std::endl;
       //Check if key_to_erase is in fParticleList of fDroppedParticleList
       if (fParticleList.KnownParticle(key_to_erase)) fParticleList.erase(key_to_erase);
       else if (fdroppedParticleList && fdroppedParticleList->KnownParticle(key_to_erase)) fdroppedParticleList->erase(key_to_erase);
-      else std::cout<<"ParticleListActionService::postUserTrackingAction: key "<<key_to_erase<<" not found in fParticleList or fDroppedParticleList"<<std::endl;
+      //else std::cout<<"ParticleListActionService::postUserTrackingAction: key "<<key_to_erase<<" not found in fParticleList or fDroppedParticleList"<<std::endl;
       //fParticleList.erase(key_to_erase);
       //
       int const trackID = aTrack->GetTrackID() + fTrackIDOffset;
@@ -550,7 +557,9 @@ namespace larg4 {
       // do add the particle to the parent id map though
       // and set the current track id to be it's ultimate parent
       fParentIDMap[trackID] = parentID;
-      fCurrentTrackID = -1 * this->GetParentage(trackID);
+
+      fCurrentTrackID = -1 * this->GetParentage(trackID); // we do reverse this trackID since it's outside the volume
+
       fTargetIDMap[trackID] = fCurrentTrackID;
     }
 

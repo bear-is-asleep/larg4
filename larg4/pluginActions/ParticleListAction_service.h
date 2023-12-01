@@ -171,6 +171,7 @@ namespace larg4 {
       simb::MCParticle* particle = nullptr; ///< simple structure representing particle
       bool keepFullTrajectory = false;      ///< if there was decision to keep
       bool isInVolume = false;              ///< drop if not involume
+      bool dropEM = false;                  ///< drop if EM shower 
 
       /// Index of the particle in the original generator truth record.
       simb::GeneratedParticleIndex_t truthIndex = simb::NoGeneratedParticleIndex;
@@ -181,6 +182,7 @@ namespace larg4 {
         particle = nullptr;
         keepFullTrajectory = false;
         isInVolume = false;
+        dropEM = false;
         truthIndex = simb::NoGeneratedParticleIndex;
       }
 
@@ -222,6 +224,7 @@ namespace larg4 {
                                      ///  storeTrajectories is set to false, this list is ignored
                                      ///  and all additional trajectory points are not stored.
     std::map<int, int> fParentIDMap; ///< key is current track ID, value is parent ID
+
     std::map<int, int>
       fTargetIDMap; ///< key is original track ID, value is ID to assign for downstream objs (e.g. SimEdeps)
     int fCurrentTrackID;         ///< track ID of the current particle, set to eve ID
