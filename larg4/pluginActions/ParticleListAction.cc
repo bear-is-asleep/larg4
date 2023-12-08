@@ -226,6 +226,7 @@ namespace larg4 {
   // the fParentIDMap
   int ParticleListActionService::GetParentage(int trackid) const
   {
+    std::cout<<"GetParentage: "<<trackid<<std::endl;
     int parentid = sim::NoParticleId;
 
     // search the fParentIDMap recursively until we have the parent id
@@ -237,6 +238,7 @@ namespace larg4 {
       parentid = (*itr).second;
       itr = fParentIDMap.find(parentid);
     }
+    std::cout<<"parentid: "<<parentid<<std::endl;
 
     return parentid;
   }
@@ -245,6 +247,7 @@ namespace larg4 {
   // Create our initial simb::MCParticle object and add it to the sim::ParticleList.
   void ParticleListActionService::preUserTrackingAction(const G4Track* track)
   {
+    std::cout<<"***************"<<std::endl;
     // Particle type.
     G4ParticleDefinition* particleDefinition = track->GetDefinition();
     G4int pdgCode = particleDefinition->GetPDGEncoding();
@@ -255,6 +258,9 @@ namespace larg4 {
     // runs (if any)
     int const trackID = track->GetTrackID() + fTrackIDOffset;
     fCurrentTrackID = trackID;
+    std::cout<<"fCurrentTrackID initialize: "<<fCurrentTrackID
+    <<"trackID: "<< trackID 
+    <<"fTrackIDOffset" << std::endl;
     fTargetIDMap[trackID] = fCurrentTrackID;
     // And the particle's parent (same offset as above):
     int parentID = track->GetParentID() + fTrackIDOffset;
@@ -331,8 +337,9 @@ namespace larg4 {
         for (auto const& p : fNotStoredPhysics) {
           if (process_name.find(p) != std::string::npos) {
             notstore = true;
-            mf::LogDebug("NotStoredPhysics") << "Found process : " << process_name
-            << "trackID : " << fCurrentTrackID << " parentID : " << parentID << " pdgCode : " << pdgCode;
+            //mf::LogDebug("NotStoredPhysics") 
+            std::cout<< "Found process : " << process_name
+            << " trackID : " << fCurrentTrackID << " parentID : " << parentID << " pdgCode : " << pdgCode;
 
             int old = 0;
             auto search = fNotStoredCounterUMap.find(p);
@@ -348,6 +355,7 @@ namespace larg4 {
           if (!fStoreDroppedMCParticles) {
             fCurrentTrackID = -1 * this->GetParentage(trackID); // only set if not storing dropped particles
           }
+          std::cout<<" fCurrentTrackID in notstore: "<<fCurrentTrackID<<std::endl;
           // check that fCurrentTrackID is in the particle list - it is possible
           // that this particle's parent is a particle that did not get tracked.
           // An example is a parent that was made due to muMinusCaptureAtRest
@@ -375,6 +383,8 @@ namespace larg4 {
       // cut, don't add it to our list.
       G4double energy = track->GetKineticEnergy();
       if (energy < fenergyCut && pdgCode != 0) {
+        std::cout<<"energy cut: " << fenergyCut << "trackID : " << fCurrentTrackID << " parentID : " << parentID << " pdgCode : " << pdgCode
+        << "notstore: " << notstore << std::endl;
         fdroppedTracksMap[this->GetParentage(trackID)].insert(trackID);
         fCurrentParticle.clear();
         // do add the particle to the parent id map though
@@ -394,17 +404,23 @@ namespace larg4 {
       // if not, then see if it is possible to walk up the fParentIDMap to find the
       // ultimate parent of this particle.  Use that ID as the parent ID for this
       // particle
+      std::cout<<"!fParticleList.KnownParticle(parentID) " << !fParticleList.KnownParticle(parentID) << " trackID : " << fCurrentTrackID << " parentID : " << parentID << " pdgCode : " << pdgCode
+      << "fMCTIndexMap.count(parentID)==0: " << (fMCTIndexMap.count(parentID)==0)
+      << " !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)): " << !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)) << std::endl;
       if (!fParticleList.KnownParticle(parentID) && 
-        (fMCTIndexMap.count(parentID)==0 && 
+        (fMCTIndexMap.count(parentID)==0 || 
         !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)))) {
+        std::cout << "setting parentID to ultimate parent" << std::endl;
         // do add the particle to the parent id map
         // just in case it makes a daughter that we have to track as well
         fParentIDMap[trackID] = parentID;
         int pid = this->GetParentage(parentID);
 
+        std::cout<<"pid: "<<pid<<std::endl;
+
         // if we still can't find the parent in the particle navigator,
         // we have to give up
-        if (!fParticleList.KnownParticle(pid) && (fMCTIndexMap.count(pid)==0 && 
+        if (!fParticleList.KnownParticle(pid) && (fMCTIndexMap.count(pid)==0 || 
           !(fdroppedParticleList && fdroppedParticleList->KnownParticle(parentID)))) {
           MF_LOG_WARNING("ParticleListActionService")
             << "can't find parent id: " << parentID << " in the particle list, or fParentIDMap."
